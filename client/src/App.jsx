@@ -276,15 +276,20 @@ function App() {
         </select>
 
         <ul>
-          {projects.map((project) => (
+          {projects.map((project) => {
+            const client = clients.find(
+              (c) => c.id === Number(project.clientId)
+            );
+            return (
             <li key={project.id}>
               <strong>{project.name}</strong>
 
               <span>
-                Client ID: {project.clientId}
+                {client ? client.name : project.clientId}
               </span>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </div>
     </div>

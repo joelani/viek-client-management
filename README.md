@@ -58,6 +58,24 @@ Important observation: The supplied backend returns the user's password in that 
 - **Testing:** Verified `server/server.js` line 126 now converts `id` to number and traced flow from `deleteClient()` in `client/src/App.jsx`.
 - **Status:** Fixed and verified.
 
+### 7. Project Filter Type Mismatch
+
+- **File:** `server/server.js`
+- **Issue:** Selecting a client in the Projects filter always showed an empty list, while `All Clients` worked.
+- **Root cause:** The `GET /api/projects` handler compared numeric `project.clientId` with string `req.query.clientId` using strict equality (`project.clientId === clientId`), which is always false for `1 === "1"`, so filtered result was always `[]`.
+- **Solution:** Changed filter comparison to `project.clientId === Number(clientId)` to normalize types before strict comparison, same pattern as delete fix.
+- **Testing:** Verified `server/server.js` line 148 now converts `clientId` to number and traced flow from `loadProjects()` with `selectedClient` in `client/src/App.jsx`.
+- **Status:** Fixed and verified.
+
+### 8. Project Client Display
+
+- **File:** `client/src/App.jsx`
+- **Issue:** The Projects section displayed raw `Client ID: 1` instead of the client name.
+- **Root cause:** The render output `project.clientId` directly even though `clients` state already held id-to-name mapping; an intermediate attempt also shadowed `clients` state with `.map()` index param, rendering `undefined`.
+- **Solution:** Changed Projects list to join `project.clientId` to `clients` state via `find` with `Number()` normalization and render `Client: {client.name}` with id fallback.
+- **Testing:** Verified `client/src/App.jsx` Projects `map` now resolves name from `clients` state.
+- **Status:** Fixed and verified.
+
 ## Testing
 
 - Started the Express backend successfully.
