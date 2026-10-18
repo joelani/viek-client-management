@@ -103,8 +103,12 @@ app.post("/api/clients", authenticate, (req, res) => {
     });
   }
 
+  const nextId = clients.length
+    ? Math.max(...clients.map((c) => c.id)) + 1
+    : 1;
+
   const newClient = {
-    id: clients.length + 1,
+    id: nextId,
     name,
     email
   };
@@ -112,7 +116,8 @@ app.post("/api/clients", authenticate, (req, res) => {
   clients.push(newClient);
 
   res.status(201).json({
-    data: newClient
+    message: "Client added successfully",
+    client: newClient
   });
 });
 

@@ -1,94 +1,74 @@
-Important observation: The supplied backend returns the user's password in that response. Record this as a security issue; we'll address it after establishing our baseline.
-
 # VIEK Client Management — Debugging Assessment
 
-## Bugs Identified
+## Overview
 
-### 1. React Runtime Error
+Debugged a React/Vite client management application and Node.js/Express REST API. Fixed 11 issues involving rendering, API contracts, state management, request handling, ID generation, filtering, and credential exposure.
 
-- **File:** `client/src/App.jsx`
-- **Issue:** The application displayed a blank page because `React` was not defined.
-- **Root cause:** The module imported React hooks but did not import the `React` identifier required by the JSX transformation in the current setup.
-- **Solution:** Added the default React import alongside `useEffect` and `useState`.
-- **Testing:** Confirmed that the login screen rendered successfully after the change.
-- **Status:** Fixed and verified.
+## Bugs Identified and Fixed
 
-### 2. Clients List Mismatch
+| #   | Issue                                  | Root Cause                                           | Fix                                                       |
+| --- | -------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
+| 1   | Blank page                             | Missing React import                                 | Added the React import in `App.jsx`.                      |
+| 2   | Clients list not rendering             | API returned `data` instead of `clients`             | Standardized the response property to `clients`.          |
+| 3   | Projects render crash                  | Project state initialized as `undefined`             | Initialized project state with `useState([])`.            |
+| 4   | Client creation returned 400           | Missing JSON content-type header                     | Added `Content-Type: application/json`.                   |
+| 5   | Password exposed in login response     | Handler returned the complete user object            | Returned only the token, ID, name, and email.             |
+| 6   | Client deletion failed                 | Compared numeric IDs with a string route parameter   | Converted the route ID to a number.                       |
+| 7   | Project filtering returned no results  | Compared numeric IDs with a string query parameter   | Converted the query parameter to a number.                |
+| 8   | Projects displayed raw client IDs      | Rendered the ID instead of resolving the client      | Displayed the associated client name with an ID fallback. |
+| 9   | Duplicate client IDs after deletion    | Generated IDs using `clients.length + 1`             | Generated the next ID from the highest existing ID.       |
+| 10  | Failed requests could corrupt UI state | Loaders updated state without checking `response.ok` | Added response guards before updating state.              |
+| 11  | Inconsistent client creation response  | Create endpoint returned `data`                      | Standardized the response to `{ message, client }`.       |
 
-- **File:** `server/server.js`
-- **Issue:** The clients list did not render because the frontend read the list from `result.clients` while the `GET /api/clients` endpoint returned it as `data`.
-- **Root cause:** Response property name mismatch between backend (`data`) and frontend expectation (`clients`), inconsistent with `GET /api/projects` which already uses `projects`.
-- **Solution:** Changed the `GET /api/clients` JSON response property from `data` to `clients`.
-- **Testing:** Re-traced data flow from `loadClients()` in `client/src/App.jsx` to `GET /api/clients` in `server/server.js` and confirmed both sides now use `clients`.
-- **Status:** Fixed and verified.
+## Setup
 
-### 3. Projects Runtime Error
+Requirements: Node.js and npm.
 
-- **File:** `client/src/App.jsx`
-- **Issue:** The application crashed after login with `Uncaught TypeError: Cannot read properties of undefined (reading 'map')` at line 278.
-- **Root cause:** The `projects` state was initialized as `undefined` while the render called `projects.map()` unconditionally before `loadProjects()` resolved, unlike `clients` which was initialized to `[]`.
-- **Solution:** Changed the `projects` state initialization from `useState()` to `useState([])`.
-- **Testing:** Verified `client/src/App.jsx` line 19 now initializes to `[]` and line 278 `projects.map()` can render safely on first load.
-- **Status:** Fixed and verified.
+Start the backend:
 
-### 4. AddClient Bad Request
+```bash
+cd server
+npm install
+npm start
+```
 
-- **File:** `client/src/App.jsx`
-- **Issue:** Adding a client failed with `POST http://localhost:4000/api/clients 400 (Bad Request)` and message `Name and email are required`.
-- **Root cause:** The `addClient()` fetch sent `JSON.stringify({name, email})` without `Content-Type: application/json`, so `express.json()` did not parse the body and `req.body` was empty, unlike `login()` which already sent the header.
-- **Solution:** Added `"Content-Type": "application/json"` to the `addClient()` request headers.
-- **Testing:** Verified `client/src/App.jsx` line 100 now sends `Content-Type` header and traced flow to `POST /api/clients` validation in `server/server.js`.
-- **Status:** Fixed and verified.
+In a separate terminal, start the frontend:
 
-### 5. Login Password Exposure
+```bash
+cd client
+npm install
+npm run dev
+```
 
-- **File:** `server/server.js`
-- **Issue:** The `POST /api/login` endpoint returned the full user object including `password` in plain text.
-- **Root cause:** The handler sent the whole `user` object from the `users` array, which contains `password: "password123"`, while `client/src/App.jsx` only needed `result.token`.
-- **Solution:** Changed login response to return only `token`, `id`, `name`, and `email` instead of the full `user` object.
-- **Testing:** Verified `server/server.js` lines 68-73 no longer include `user` or `password` and traced flow from `login()` in `client/src/App.jsx`.
-- **Status:** Fixed and verified.
+Default development URLs:
 
-### 6. DeleteClient Type Mismatch
-
-- **File:** `server/server.js`
-- **Issue:** Deleting a client always failed with `404 Client not found` even for existing IDs.
-- **Root cause:** The `DELETE /api/clients/:id` handler compared numeric `client.id` with string `req.params.id` using strict inequality (`client.id !== id`), which is always true for `1 !== "1"`, so nothing was ever filtered out.
-- **Solution:** Changed filter comparison to `client.id !== Number(id)` to normalize types before strict comparison.
-- **Testing:** Verified `server/server.js` line 126 now converts `id` to number and traced flow from `deleteClient()` in `client/src/App.jsx`.
-- **Status:** Fixed and verified.
-
-### 7. Project Filter Type Mismatch
-
-- **File:** `server/server.js`
-- **Issue:** Selecting a client in the Projects filter always showed an empty list, while `All Clients` worked.
-- **Root cause:** The `GET /api/projects` handler compared numeric `project.clientId` with string `req.query.clientId` using strict equality (`project.clientId === clientId`), which is always false for `1 === "1"`, so filtered result was always `[]`.
-- **Solution:** Changed filter comparison to `project.clientId === Number(clientId)` to normalize types before strict comparison, same pattern as delete fix.
-- **Testing:** Verified `server/server.js` line 148 now converts `clientId` to number and traced flow from `loadProjects()` with `selectedClient` in `client/src/App.jsx`.
-- **Status:** Fixed and verified.
-
-### 8. Project Client Display
-
-- **File:** `client/src/App.jsx`
-- **Issue:** The Projects section displayed raw `Client ID: 1` instead of the client name.
-- **Root cause:** The render output `project.clientId` directly even though `clients` state already held id-to-name mapping; an intermediate attempt also shadowed `clients` state with `.map()` index param, rendering `undefined`.
-- **Solution:** Changed Projects list to join `project.clientId` to `clients` state via `find` with `Number()` normalization and render `Client: {client.name}` with id fallback.
-- **Testing:** Verified `client/src/App.jsx` Projects `map` now resolves name from `clients` state.
-- **Status:** Fixed and verified.
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:4000`
 
 ## Testing
 
-- Started the Express backend successfully.
-- Tested login using the supplied assessment credentials and received a JSON response.
-- Started the Vite development server.
-- Verified that the login screen renders after fixing the React runtime error.
+All 11 regression tests passed.
 
-## Security
+- Valid login and password-free login response.
+- Invalid login rejection.
+- Client list retrieval and rendering.
+- Valid client creation.
+- Invalid client input rejection.
+- Client deletion without affecting other clients.
+- Unique ID generation after deletion and creation.
+- Correct rendering of all seeded projects and client names.
+- Correct project filtering by client.
+- Rejection of unauthenticated requests on protected endpoints.
+- `404 Not Found` when deleting a nonexistent client.
 
-- Initial observation: The login endpoint returns the user object, including the password, in its response. This requires correction.
-- Further security investigation and testing are pending.
+The backend and frontend also started successfully, and the login screen rendered after the React import fix.
+
+## Security and Limitations
+
+The login response no longer exposes the user's password. This fix does not establish production-grade authentication. Password hashing, robust token generation and verification, and appropriate CORS restrictions require further review before production use.
+
+Client data and generated IDs are held in application memory. This implementation does not provide persistent storage or database-level uniqueness guarantees.
 
 ## Reflection
 
-- **Debugging approach:** Reproduced the runtime error, inspected the component imports, applied a targeted fix, and verified the result in the browser.
-- **Outstanding work:** Investigate and resolve the remaining frontend, backend, API, data-handling, authentication, and security issues.
+I traced errors across frontend components and backend endpoints, checked API response contracts and data types, and applied targeted fixes. I then tested the affected user flows, including authentication, client management, project filtering, and error handling.

@@ -69,6 +69,11 @@ function App() {
 
     const result = await response.json();
 
+    if (!response.ok) {
+      setMessage(result.message);
+      return;
+    }
+
     setClients(result.clients);
   }
 
@@ -84,6 +89,11 @@ function App() {
     });
 
     const result = await response.json();
+
+    if (!response.ok) {
+      setMessage(result.message);
+      return;
+    }
 
     setProjects(result.projects);
   }
